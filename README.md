@@ -69,8 +69,23 @@ Trong Telegram DM với bot:
 Có thể đưa prompt này cho một OpenClaw khác:
 
 ```text
-Tạo plugin local tên codex-list cho OpenClaw, cài vào ~/.openclaw/extensions/codex-list.
-Yêu cầu:
+Clone repo https://github.com/dinhlinh86/codex_list rồi cài plugin `codex-list` cho OpenClaw theo đúng trình tự sau:
+
+1. Git clone repo về máy local.
+2. Đọc README trong repo để hiểu flow cài đặt.
+3. Copy `openclaw.plugin.json` và `index.js` vào `~/.openclaw/extensions/codex-list/`.
+4. Bật plugin `codex-list` trong `~/.openclaw/openclaw.json` bằng cách:
+   - thêm `codex-list` vào `plugins.allow`
+   - thêm `plugins.entries.codex-list.enabled = true`
+5. Restart gateway bằng `openclaw gateway restart`.
+6. Test command `/codex_list` trong Telegram DM hoặc môi trường command tương ứng.
+7. Xác nhận command chạy hoàn toàn local/offline, không gọi model AI.
+8. Nếu lỗi, kiểm tra:
+   - file `~/.openclaw/agents/main/agent/auth-profiles.json`
+   - plugin load status qua `openclaw plugins list` và `openclaw plugins doctor`
+   - Telegram command scope cũ nếu menu không hiện đúng.
+
+Yêu cầu kỹ thuật của plugin:
 - command /codex_list chạy hoàn toàn local/offline, không gọi model AI
 - đọc ~/.openclaw/agents/main/agent/auth-profiles.json
 - liệt kê mọi key openai-codex:*
@@ -78,8 +93,6 @@ Yêu cầu:
 - nếu là Telegram thì thêm inline buttons
 - hỗ trợ /codex_list <number> để gọi local CLI:
   openclaw models auth order set --provider openai-codex <selected> <others...>
-- bật plugin trong ~/.openclaw/openclaw.json rồi restart gateway
-- test lại bằng /codex_list
 ```
 
 ## Ghi chú triển khai
@@ -95,3 +108,7 @@ Yêu cầu:
 - [ ] Nút Telegram hiện đúng
 - [ ] `/codex_list <number>` switch được primary
 - [ ] Chạy lại `/codex_list` thấy thứ tự đổi đúng
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=dinhlinh86/codex_list&type=Date)](https://www.star-history.com/#dinhlinh86/codex_list&Date)
