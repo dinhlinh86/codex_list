@@ -131,4 +131,10 @@ Yêu cầu kỹ thuật của plugin:
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=dinhlinh86/codex_list&type=Date)](https://www.star-history.com/#dinhlinh86/codex_list&Date)
+<a href="https://www.star-history.com/?repos=dinhlinh86%2Fcodex_list&type=date&legend=top-left">
+ <picture>
+ <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=dinhlinh86/codex_list&type=date&theme=dark&legend=top-left" />
+ <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=dinhlinh86/codex_list&type=date&legend=top-left" />
+ <img alt="Star History Chart" src="https://api.star-history.com/image?repos=dinhlinh86/codex_list&type=date&legend=top-left" />
+ </picture>
+</a>
