@@ -5,6 +5,24 @@ Offline local plugin cho OpenClaw để:
 - đổi profile primary ngay từ Telegram bằng `/codex_list <number>`
 - không gọi model AI để xử lý command
 
+## Demo
+
+![Telegram demo for /codex_list](assets/telegram-demo-2.jpg)
+
+## Cách dùng nhanh
+
+```text
+/codex_list
+/codex_list <number>
+/status
+```
+
+**Flow ngắn:**
+1. Gõ `/codex_list` để xem danh sách profile Codex local.
+2. Gõ `/codex_list 2` (ví dụ) để đổi sang profile số 2.
+3. Nếu session chưa ăn profile mới, dùng `/new` hoặc `/reset`.
+4. Gõ `/status` để kiểm tra lại session hiện tại.
+
 ## Tính năng
 
 - `/codex_list` → in danh sách profile Codex local
@@ -17,6 +35,8 @@ Offline local plugin cho OpenClaw để:
 
 - `openclaw.plugin.json` — manifest plugin
 - `index.js` — logic plugin
+- `install.sh` — script cài nhanh
+- `scripts_smoke_test.mjs` — smoke test local
 
 ## Cách cài nhanh trên máy OpenClaw khác
 
