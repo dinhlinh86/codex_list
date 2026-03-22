@@ -1,59 +1,76 @@
-# codex_list
+# codex-list
 
-Plugin local/offline cho OpenClaw để quản lý profile **OpenAI Codex OAuth** ngay trong Telegram, **không gọi model AI/API** để xử lý command.
+Plugin local/offline cho OpenClaw để quản lý OpenAI Codex OAuth profiles. Các command xử lý local, không gọi model AI/API để chạy flow.
 
-## Có gì trong bản 0.2.0
-- `/codex_list` → xem toàn bộ profile Codex local
-- `/codex_list <number>` → đổi profile primary
-- `➕ ADD` / `/codex_list add` → mở flow OAuth local để thêm profile mới
-- `✏️ NAME` / `/codex_list name` → hiện hướng dẫn đổi tên profile an toàn
+## Lệnh
 
-## Flow nhanh
 ```text
 /codex_list
-/codex_list 2
-/codex_list add
-/codex_list name
-/codex_list name 2 ten_cua_ban
+/codex_list <number>
+/codex_list name <number> <ten_moi>
+/codexadd
+/vr <callback_url>
 ```
 
-## Ghi chú rename
-- Chỉ rename được profile không phải profile đang active
-- Nếu đang dùng đúng profile đó, hãy switch sang profile khác rồi quay lại đổi tên
+## Flow nhanh
 
-## Cài nhanh
-```bash
-mkdir -p ~/.openclaw/extensions/codex-list
-cp openclaw.plugin.json index.js ~/.openclaw/extensions/codex-list/
-```
+1. `/codex_list` → xem profile
+2. `/codex_list 2` → đổi primary
+3. `/codex_list name 2 ten_moi` → đổi tên local
+4. `/codexadd` → lấy OAuth URL
+5. `/vr http://localhost:1455/auth/callback?...` → verify callback
 
-Bật plugin trong `~/.openclaw/openclaw.json`:
+## File chính
 
-```json
-{
-  "plugins": {
-    "allow": ["telegram", "codex-list"],
-    "entries": {
-      "codex-list": { "enabled": true }
-    }
-  }
-}
-```
-
-Restart gateway:
-```bash
-openclaw gateway restart
-```
-
-## Test tay
-- [ ] `/codex_list` in đủ profile
-- [ ] `/codex_list <number>` switch được primary
-- [ ] Có nút `ADD` và `NAME` trên Telegram
-- [ ] `/codex_list add` trả hướng dẫn OAuth local
-- [ ] `/codex_list name` trả đúng ghi chú rename
-
-## Files chính
 - `openclaw.plugin.json`
 - `index.js`
-- `README.md`
-- `install.sh`
+- `oauth-helper.py`
+
+## Tương thích
+
+Dùng được trên **macOS** và **Linux** nếu máy có đủ:
+- `python3`
+- `node`
+- `expect`
+
+Helper hiện đã có fallback khi shim `openclaw` trong PATH bị hỏng; nó có thể gọi thẳng `node .../dist/index.js`.
+
+## Prompt cài cho OpenClaw khác
+
+Copy-paste prompt này và chỉ sửa version/tag/repo theo bản muốn cài:
+
+```text
+Cài plugin `codex-list` phiên bản <VERSION> từ repo <REPO_URL> cho máy OpenClaw này.
+
+Yêu cầu:
+1. Clone đúng version/tag/commit <VERSION>.
+2. Copy các file sau vào `~/.openclaw/extensions/codex-list/`:
+   - `openclaw.plugin.json`
+   - `index.js`
+   - `oauth-helper.py`
+   - `README.md`
+3. Đảm bảo `oauth-helper.py` có quyền chạy (`chmod +x`).
+4. Kiểm tra máy có đủ dependency:
+   - `python3`
+   - `node`
+   - `expect`
+5. Bật plugin `codex-list` trong `~/.openclaw/openclaw.json`:
+   - thêm `codex-list` vào `plugins.allow`
+   - thêm `plugins.entries.codex-list.enabled = true`
+6. Restart gateway.
+7. Test local commands:
+   - `/codex_list`
+   - `/codexadd`
+   - `/vr <callback_url>`
+8. Nếu có flow OAuth cũ bị treo thì dọn:
+   - `~/.openclaw/extensions/codex-list/oauth-state.json`
+   - `~/.openclaw/extensions/codex-list/oauth-runtime/*`
+9. Xác nhận plugin chạy local/offline, không rơi sang model AI cho các command trên.
+
+Lưu ý:
+- Phải giữ nguyên command names hiện tại:
+  - `/codex_list`
+  - `/codexadd`
+  - `/vr`
+- Nếu shim `openclaw` trong PATH bị lỗi, ưu tiên fallback sang `node .../dist/index.js`.
+```

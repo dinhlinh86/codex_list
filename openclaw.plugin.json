@@ -2,12 +2,14 @@
   "id": "codex-list",
   "name": "Codex OAuth Profile Switcher",
   "version": "0.2.0",
-  "description": "Offline local /codex_list command for OpenClaw to list, switch, add and guide OpenAI Codex OAuth profile flows.",
+  "description": "Offline/local Codex OAuth profile manager. Commands run without calling model AI/API for list, switch, rename, add, and verify flows.",
   "entry": "index.js",
   "configSchema": {
     "type": "object",
     "properties": {
-      "defaultAgent": { "type": "string" }
+      "defaultAgent": {
+        "type": "string"
+      }
     },
     "additionalProperties": true
   }

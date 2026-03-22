@@ -7,8 +7,17 @@ const DEFAULT_AGENT_ID = "main";
 const PROVIDER_ID = "openai-codex";
 const COMMAND_LIST = "codex_list";
 const ACTION_ADD = "add";
+const COMMAND_ADD_CODEX = "codexadd";
+const COMMAND_VERIFY_CODEX = "vr";
 const ACTION_NAME = "name";
 const ACTION_CONFIRM_NAME = "confirm-name";
+const CALLBACK_PREFIX = "http://localhost:1455/auth/callback?";
+const OAUTH_STATE_PATH = path.join(os.homedir(), ".openclaw", "extensions", "codex-list", "oauth-state.json");
+const OAUTH_IO_DIR = path.join(os.homedir(), ".openclaw", "extensions", "codex-list", "oauth-runtime");
+
+function ensureRuntimeDir() {
+  fs.mkdirSync(OAUTH_IO_DIR, { recursive: true });
+}
 
 function expandHome(input) {
   if (input === "~") return os.homedir();
@@ -55,6 +64,23 @@ function getProfileMap(parsed) {
   return parsed?.profiles && typeof parsed.profiles === "object" ? parsed.profiles : parsed;
 }
 
+function readOauthState() {
+  try {
+    return JSON.parse(fs.readFileSync(OAUTH_STATE_PATH, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeOauthState(data) {
+  ensureRuntimeDir();
+  fs.writeFileSync(OAUTH_STATE_PATH, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+}
+
+function clearOauthState() {
+  try { fs.unlinkSync(OAUTH_STATE_PATH); } catch {}
+}
+
 function getCurrentOrder() {
   try {
     const output = execFileSync(getOpenclawBin(), ["models", "auth", "order", "get", "--provider", PROVIDER_ID], {
@@ -63,10 +89,7 @@ function getCurrentOrder() {
     }).trim();
     const match = output.match(/Order override:\s*(.+)$/m);
     const raw = match ? match[1] : output;
-    return raw
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item.startsWith(PROVIDER_ID));
+    return raw.split(",").map((item) => item.trim()).filter((item) => item.startsWith(PROVIDER_ID));
   } catch {
     return [];
   }
@@ -116,26 +139,33 @@ function buildListText(profiles) {
     lines.push("");
   });
   lines.push(`Reply /${COMMAND_LIST} <number> to switch primary.`);
-  lines.push(`Reply /${COMMAND_LIST} ${ACTION_ADD} để mở flow OAuth local.`);
-  lines.push(`Reply /${COMMAND_LIST} ${ACTION_NAME} để xem hướng dẫn đổi tên profile.`);
+  lines.push(`Reply /${COMMAND_LIST} ${ACTION_NAME} <number> <ten_moi> to rename.`);
+  lines.push(`Reply /${COMMAND_ADD_CODEX} to start OAuth add flow.\nReply /${COMMAND_VERIFY_CODEX} <callback_url> to finish verify.`);
+  const pending = readOauthState();
+  if (pending?.url) lines.push(`⚠️ Có flow add đang chờ callback. Dán callback URL bằng /${COMMAND_LIST} <callback_url>.`);
   return lines.join("\n");
 }
 
 function buildTelegramButtons(profiles) {
   const rows = [];
   for (let i = 0; i < profiles.length; i += 2) {
-    rows.push(
-      profiles.slice(i, i + 2).map((profile, offset) => ({
-        text: `${i + offset + 1}${profile.isPrimary ? " ★" : ""}`,
-        callback_data: `/${COMMAND_LIST} ${i + offset + 1}`,
-      })),
-    );
+    rows.push(profiles.slice(i, i + 2).map((profile, offset) => ({
+      text: `${i + offset + 1}${profile.isPrimary ? " ★" : ""}`,
+      callback_data: `/${COMMAND_LIST} ${i + offset + 1}`,
+    })));
   }
   rows.push([
-    { text: "➕ ADD", callback_data: `/${COMMAND_LIST} ${ACTION_ADD}` },
+    { text: "➕ ADD", callback_data: `/${COMMAND_ADD_CODEX}` },
     { text: "✏️ NAME", callback_data: `/${COMMAND_LIST} ${ACTION_NAME}` },
   ]);
   return rows;
+}
+
+function buildRenameConfirmButtons(index, newName) {
+  return [[
+    { text: "✅ Xác nhận", callback_data: `/${COMMAND_LIST} ${ACTION_CONFIRM_NAME} ${index} ${newName}` },
+    { text: "❌ Hủy", callback_data: `/${COMMAND_LIST}` },
+  ]];
 }
 
 function switchPrimary(selected, profiles) {
@@ -149,32 +179,116 @@ function isValidProfileSuffix(name) {
   return /^[a-z0-9_-]+$/i.test(name);
 }
 
-function startOauthFlowDetached() {
-  const child = spawn(getOpenclawBin(), ["models", "auth", "login", "--provider", PROVIDER_ID], {
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
+function isCallbackUrl(value) {
+  return typeof value === "string" && value.startsWith(CALLBACK_PREFIX);
 }
 
-function handleAdd() {
+function getOauthHelperPath() {
+  return path.join(os.homedir(), ".openclaw", "extensions", "codex-list", "oauth-helper.py");
+}
+
+function cleanupOauthArtifacts(state) {
+  if (!state) return;
+  try { fs.unlinkSync(state.inPath); } catch {}
+  try { fs.unlinkSync(state.outPath); } catch {}
+  clearOauthState();
+}
+
+async function handleAdd() {
   try {
-    startOauthFlowDetached();
-  } catch {
-    // fallback to instruction-only mode
+    const existing = readOauthState();
+    if (existing?.url || existing?.outPath) {
+      return {
+        text: [
+          "⚠️ Đang có 1 flow add chưa hoàn tất.",
+          "Dùng lại link hiện có hoặc dán callback URL của flow đang mở.",
+          existing?.url || "",
+        ].filter(Boolean).join("\n"),
+        isError: true,
+      };
+    }
+
+    execFileSync(getOauthHelperPath(), ["start"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 20000,
+    });
+
+    const state = readOauthState();
+    if (!state?.url) {
+      return {
+        text: `⏳ Đang tạo OAuth link, bác chạy lại /${COMMAND_ADD_CODEX} sau 1-2 giây.`,
+      };
+    }
+
+    return {
+      text: [
+        "➕ ADD profile mới",
+        "",
+        "Bước 1: mở link OAuth này trên máy local để login OpenAI Codex:",
+        state.url,
+        "",
+        `Bước 2: sau khi browser chuyển về URL callback, dán NGUYÊN URL đó vào chat theo cú pháp: /${COMMAND_VERIFY_CODEX} <callback_url>`,
+        `Ví dụ: /${COMMAND_VERIFY_CODEX} http://localhost:1455/auth/callback?...`,
+        "",
+        "Plugin đang giữ nguyên flow local đó để chờ callback.",
+      ].join("\n"),
+    };
+  } catch (error) {
+    const state = readOauthState();
+    if (state?.url) {
+      return {
+        text: [
+          "➕ ADD profile mới",
+          "",
+          "Bước 1: mở link OAuth này trên máy local để login OpenAI Codex:",
+          state.url,
+          "",
+          `Bước 2: sau khi browser chuyển về URL callback, dán NGUYÊN URL đó vào chat theo cú pháp: /${COMMAND_VERIFY_CODEX} <callback_url>`,
+        ].join("\n"),
+      };
+    }
+    const detail = error?.stderr?.toString?.() || error?.message || String(error);
+    return {
+      text: [
+        "⚠️ Không lấy được OAuth URL tự động.",
+        `Lỗi: ${detail}`,
+      ].join("\n"),
+      isError: true,
+    };
   }
-  return {
-    text: [
-      "➕ ADD profile mới",
-      "",
-      "Plugin sẽ gọi flow OAuth local trên máy này.",
-      "Nếu terminal không hiện ra, hãy tự chạy lệnh sau:",
-      `\`${getOpenclawBin()} models auth login --provider ${PROVIDER_ID}\``,
-      "",
-      "Sau khi verify xong, profile mới thường sẽ rơi vào tên kiểu `openai-codex:default`.",
-      `Sau đó dùng /${COMMAND_LIST} ${ACTION_NAME} để xem hướng dẫn đổi tên profile.`,
-    ].join("\n"),
-  };
+}
+
+async function handleCallback(rawArgs) {
+  const callbackUrl = rawArgs.trim();
+  const state = readOauthState();
+  if (!state?.outPath) {
+    return {
+      text: `⚠️ Hiện không có flow add nào đang chờ callback. Hãy chạy /${COMMAND_LIST} ${ACTION_ADD} trước.`,
+      isError: true,
+    };
+  }
+
+  try {
+    execFileSync(getOauthHelperPath(), ["callback", callbackUrl], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 25000,
+    });
+    cleanupOauthArtifacts(state);
+    return {
+      text: [
+        "✅ Verify hoàn tất. Profile mới đã được add local.",
+        `Giờ chạy /${COMMAND_LIST} để xem profile mới, rồi dùng /${COMMAND_LIST} ${ACTION_NAME} <so_thu_tu> <ten_moi> nếu muốn đổi tên.`,
+      ].join("\n"),
+    };
+  } catch (error) {
+    let snapshot = "";
+    try { snapshot = fs.readFileSync(state.outPath, "utf8").split(/\r?\n/).slice(-12).join("\n"); } catch {}
+    const detail = error?.stdout?.toString?.() || error?.stderr?.toString?.() || snapshot || error?.message || String(error);
+    cleanupOauthArtifacts(state);
+    return { text: `⚠️ Flow local báo lỗi khi verify callback.\n${detail}`, isError: true };
+  }
 }
 
 function handleNameHelp() {
@@ -192,35 +306,62 @@ function handleNameHelp() {
   };
 }
 
-function handleRename(profiles, indexText, newName) {
+function runRenameDetached(authProfilesPath, oldId, newId) {
+  const parsed = loadAuthProfilesFile(authProfilesPath);
+  const profiles = parsed?.profiles && typeof parsed.profiles === "object" ? parsed.profiles : parsed;
+  if (!profiles || !profiles[oldId]) throw new Error(`old profile not found: ${oldId}`);
+  if (profiles[newId]) throw new Error(`new profile already exists: ${newId}`);
+
+  profiles[newId] = profiles[oldId];
+  delete profiles[oldId];
+
+  if (Array.isArray(parsed?.order?.[PROVIDER_ID])) {
+    parsed.order[PROVIDER_ID] = parsed.order[PROVIDER_ID].map((item) => item === oldId ? newId : item);
+  }
+  if (parsed?.lastGood?.[PROVIDER_ID] === oldId) {
+    parsed.lastGood[PROVIDER_ID] = newId;
+  }
+  if (parsed?.usageStats && parsed.usageStats[oldId]) {
+    parsed.usageStats[newId] = parsed.usageStats[oldId];
+    delete parsed.usageStats[oldId];
+  }
+
+  fs.writeFileSync(authProfilesPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+}
+
+function handleRename(authProfilesPath, profiles, indexText, newName, confirmed, channel) {
   const choice = Number.parseInt(indexText, 10);
   if (!Number.isFinite(choice) || choice < 1 || choice > profiles.length) {
     return { text: `❌ Số không hợp lệ. Dùng /${COMMAND_LIST} để xem danh sách rồi chọn 1-${profiles.length}.`, isError: true };
   }
-
   const suffix = (newName || "").trim();
   if (!suffix || !isValidProfileSuffix(suffix)) {
     return { text: "❌ Tên mới không hợp lệ. Chỉ dùng chữ, số, dấu gạch dưới (_) hoặc gạch ngang (-).", isError: true };
   }
-
   const selected = profiles[choice - 1];
+  const oldId = selected.profileId;
   const newId = `${PROVIDER_ID}:${suffix}`;
-  if (selected.profileId === newId) return { text: `⚠️ Profile đã là ${newId} rồi.` };
+  if (oldId === newId) return { text: `⚠️ Profile đã là ${newId} rồi.` };
   if (profiles.some((p) => p.profileId === newId)) return { text: `❌ Tên mới đã tồn tại: ${newId}`, isError: true };
   if (selected.isPrimary) {
     return { text: "⚠️ Chỉ rename được profile không phải profile đang active. Hãy switch sang profile khác rồi quay lại đổi tên." };
   }
 
-  return {
-    text: [
-      `ℹ️ Đã nhận yêu cầu đổi tên ${selected.profileId} → ${newId}.`,
-      "Bản 0.2.0 GitHub chỉ chốt flow list/switch/add và hướng dẫn rename an toàn.",
-      "Nếu cần flow rename tự động hoàn chỉnh, nên test local riêng trước rồi mới public.",
-    ].join("\n"),
-  };
+  if (!confirmed) {
+    const payload = { text: `⚠️ Xác nhận đổi tên ${oldId} → ${newId}?` };
+    if (channel === "telegram") payload.channelData = { telegram: { buttons: buildRenameConfirmButtons(choice, suffix) } };
+    return payload;
+  }
+
+  try {
+    runRenameDetached(authProfilesPath, oldId, newId);
+    return { text: `✅ Đã đổi tên thành "${suffix}".` };
+  } catch (error) {
+    return { text: `⚠️ Không khởi chạy được flow rename: ${error?.message || String(error)}`, isError: true };
+  }
 }
 
-function listOrSwitch(ctx) {
+async function listOrSwitch(ctx) {
   const authProfilesPath = getAuthProfilesPath(getAgentId(ctx));
   if (!fs.existsSync(authProfilesPath)) {
     return { text: `❌ Không thấy auth-profiles.json tại:\n${authProfilesPath}`, isError: true };
@@ -238,13 +379,16 @@ function listOrSwitch(ctx) {
     return payload;
   }
 
+  if (isCallbackUrl(rawArgs)) return handleCallback(rawArgs);
+
   const parts = rawArgs.split(/\s+/);
   const verb = parts[0]?.toLowerCase();
 
-  if (verb === ACTION_ADD) return handleAdd();
+  if (verb === ACTION_ADD || verb === COMMAND_ADD_CODEX) return handleAdd();
+  if (verb === COMMAND_VERIFY_CODEX) return handleCallback(parts.slice(1).join(" "));
   if (verb === ACTION_NAME && parts.length === 1) return handleNameHelp();
-  if (verb === ACTION_NAME) return handleRename(profiles, parts[1], parts.slice(2).join(" "));
-  if (verb === ACTION_CONFIRM_NAME) return handleNameHelp();
+  if (verb === ACTION_NAME) return handleRename(authProfilesPath, profiles, parts[1], parts.slice(2).join(" "), false, ctx?.channel);
+  if (verb === ACTION_CONFIRM_NAME) return handleRename(authProfilesPath, profiles, parts[1], parts.slice(2).join(" "), true, ctx?.channel);
 
   const choice = Number.parseInt(rawArgs, 10);
   if (!Number.isFinite(choice) || choice < 1 || choice > profiles.length) {
@@ -260,12 +404,28 @@ const plugin = {
   id: "codex-list",
   name: "Codex OAuth Profile Switcher",
   version: "0.2.0",
-  description: "Offline local /codex_list command for OpenClaw with list, switch, add and rename guidance.",
+  description: "Offline local /codex_list command for OpenClaw with add/name actions.",
   register(api) {
+    api.registerCommand({
+      name: COMMAND_VERIFY_CODEX,
+      nativeNames: { default: COMMAND_VERIFY_CODEX },
+      description: "Finish local OpenAI Codex OAuth verify with callback URL",
+      acceptsArgs: true,
+      requireAuth: true,
+      handler: async (ctx) => handleCallback((ctx?.args || "").trim()),
+    });
+    api.registerCommand({
+      name: COMMAND_ADD_CODEX,
+      nativeNames: { default: COMMAND_ADD_CODEX },
+      description: "Start local OpenAI Codex OAuth add flow",
+      acceptsArgs: false,
+      requireAuth: true,
+      handler: async () => handleAdd(),
+    });
     api.registerCommand({
       name: COMMAND_LIST,
       nativeNames: { default: COMMAND_LIST },
-      description: "List, switch and guide local OpenAI Codex OAuth profile flows",
+      description: "List, switch, add and rename OpenAI Codex OAuth profiles locally",
       acceptsArgs: true,
       requireAuth: true,
       handler: async (ctx) => listOrSwitch(ctx),
