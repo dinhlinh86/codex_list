@@ -1,55 +1,33 @@
 # codex_list
 
-Offline local plugin cho OpenClaw để:
-- liệt kê toàn bộ `openai-codex:*` trong local auth store
-- đổi profile primary ngay từ Telegram bằng `/codex_list <number>`
-- không gọi model AI để xử lý command
+Plugin local/offline cho OpenClaw để quản lý profile **OpenAI Codex OAuth** ngay trong Telegram, **không gọi model AI/API** để xử lý command.
 
-## Demo
+## Có gì trong bản 0.2.0
+- `/codex_list` → xem toàn bộ profile Codex local
+- `/codex_list <number>` → đổi profile primary
+- `➕ ADD` / `/codex_list add` → mở flow OAuth local để thêm profile mới
+- `✏️ NAME` / `/codex_list name` → hiện hướng dẫn đổi tên profile an toàn
 
-![Telegram demo for /codex_list](assets/telegram-demo-2.jpg)
-
-## Cách dùng nhanh
-
+## Flow nhanh
 ```text
 /codex_list
-/codex_list <number>
-/status
+/codex_list 2
+/codex_list add
+/codex_list name
+/codex_list name 2 ten_cua_ban
 ```
 
-**Flow ngắn:**
-1. Gõ `/codex_list` để xem danh sách profile Codex local.
-2. Gõ `/codex_list 2` (ví dụ) để đổi sang profile số 2.
-3. Nếu session chưa ăn profile mới, dùng `/new` hoặc `/reset`.
-4. Gõ `/status` để kiểm tra lại session hiện tại.
+## Ghi chú rename
+- Chỉ rename được profile không phải profile đang active
+- Nếu đang dùng đúng profile đó, hãy switch sang profile khác rồi quay lại đổi tên
 
-## Tính năng
-
-- `/codex_list` → in danh sách profile Codex local
-- `/codex_list <number>` → đẩy profile đã chọn lên đầu auth order
-- Telegram inline buttons khi channel hỗ trợ
-- Đọc dữ liệu từ local file `~/.openclaw/agents/<agent>/agent/auth-profiles.json`
-- Switch bằng local CLI `openclaw models auth order set ...`
-
-## Cấu trúc project
-
-- `openclaw.plugin.json` — manifest plugin
-- `index.js` — logic plugin
-- `install.sh` — script cài nhanh
-- `scripts_smoke_test.mjs` — smoke test local
-
-## Cách cài nhanh trên máy OpenClaw khác
-
-### 1) Copy plugin vào extension folder
-
+## Cài nhanh
 ```bash
 mkdir -p ~/.openclaw/extensions/codex-list
 cp openclaw.plugin.json index.js ~/.openclaw/extensions/codex-list/
 ```
 
-### 2) Bật plugin trong `~/.openclaw/openclaw.json`
-
-Đảm bảo có:
+Bật plugin trong `~/.openclaw/openclaw.json`:
 
 ```json
 {
@@ -62,82 +40,20 @@ cp openclaw.plugin.json index.js ~/.openclaw/extensions/codex-list/
 }
 ```
 
-> Nếu máy đang có `plugins.allow`, chỉ cần thêm `codex-list` vào mảng hiện tại; đừng xoá plugin khác đang dùng.
-
-### 3) Restart gateway
-
+Restart gateway:
 ```bash
 openclaw gateway restart
 ```
 
-### 4) Test
-
-Trong Telegram DM với bot:
-
-```text
-/codex_list
-```
-
-Đổi profile primary:
-
-```text
-/codex_list 2
-```
-
-## Prompt cài đặt cho OpenClaw khác
-
-Có thể đưa prompt này cho một OpenClaw khác:
-
-```text
-Clone repo https://github.com/dinhlinh86/codex_list rồi cài plugin `codex-list` cho OpenClaw theo đúng trình tự sau:
-
-1. Git clone repo về máy local.
-2. Đọc README trong repo để hiểu flow cài đặt.
-3. Copy `openclaw.plugin.json` và `index.js` vào `~/.openclaw/extensions/codex-list/`.
-4. Bật plugin `codex-list` trong `~/.openclaw/openclaw.json` bằng cách:
-   - thêm `codex-list` vào `plugins.allow`
-   - thêm `plugins.entries.codex-list.enabled = true`
-5. Restart gateway bằng `openclaw gateway restart`.
-6. Test command `/codex_list` trong Telegram DM hoặc môi trường command tương ứng.
-7. Xác nhận command chạy hoàn toàn local/offline, không gọi model AI.
-8. Nếu lỗi, kiểm tra:
-   - file `~/.openclaw/agents/main/agent/auth-profiles.json`
-   - plugin load status qua `openclaw plugins list` và `openclaw plugins doctor`
-   - Telegram command scope cũ nếu menu không hiện đúng.
-
-Yêu cầu kỹ thuật của plugin:
-- command /codex_list chạy hoàn toàn local/offline, không gọi model AI
-- đọc ~/.openclaw/agents/main/agent/auth-profiles.json
-- liệt kê mọi key openai-codex:*
-- hiển thị số thứ tự, profile id, account/email, trạng thái token, đánh dấu profile primary
-- nếu là Telegram thì thêm inline buttons
-- hỗ trợ /codex_list <number> để gọi local CLI:
-  openclaw models auth order set --provider openai-codex <selected> <others...>
-
-Prompt để tạo nhiều acc codex không bị đè lên nhau (cop vào openclaw) : 
-- tạo cho tôi link openai-codex oauth sau khi tôi hoàn thành verify thì đổi tên thành openai-codex:<ten-rieng>
-```
-
-## Ghi chú triển khai
-
-- Plugin này không dùng API ngoài.
-- Logic list dựa trên file auth local + auth order local.
-- Nếu Telegram menu không hiện đúng command, kiểm tra thêm command scope cũ của bot (`all_private_chats`).
-
-## Checklist test tay
-
-- [ ] Có file `auth-profiles.json`
+## Test tay
 - [ ] `/codex_list` in đủ profile
-- [ ] Nút Telegram hiện đúng
 - [ ] `/codex_list <number>` switch được primary
-- [ ] Chạy lại `/codex_list` thấy thứ tự đổi đúng
+- [ ] Có nút `ADD` và `NAME` trên Telegram
+- [ ] `/codex_list add` trả hướng dẫn OAuth local
+- [ ] `/codex_list name` trả đúng ghi chú rename
 
-## Star History
-
-<a href="https://www.star-history.com/?repos=dinhlinh86%2Fcodex_list&type=date&legend=top-left">
- <picture>
- <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=dinhlinh86/codex_list&type=date&theme=dark&legend=top-left" />
- <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=dinhlinh86/codex_list&type=date&legend=top-left" />
- <img alt="Star History Chart" src="https://api.star-history.com/image?repos=dinhlinh86/codex_list&type=date&legend=top-left" />
- </picture>
-</a>
+## Files chính
+- `openclaw.plugin.json`
+- `index.js`
+- `README.md`
+- `install.sh`

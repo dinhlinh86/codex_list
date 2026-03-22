@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 const DEFAULT_AGENT_ID = "main";
 const PROVIDER_ID = "openai-codex";
 const COMMAND_LIST = "codex_list";
+const ACTION_ADD = "add";
+const ACTION_NAME = "name";
+const ACTION_CONFIRM_NAME = "confirm-name";
 
 function expandHome(input) {
   if (input === "~") return os.homedir();
@@ -29,9 +32,7 @@ function getAuthProfilesPath(agentId) {
 }
 
 function parseExpiresMs(value) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value < 1e12 ? value * 1000 : value;
-  }
+  if (typeof value === "number" && Number.isFinite(value)) return value < 1e12 ? value * 1000 : value;
   if (typeof value === "string" && value.trim()) {
     const asNumber = Number(value);
     if (Number.isFinite(asNumber)) return asNumber < 1e12 ? asNumber * 1000 : asNumber;
@@ -60,7 +61,6 @@ function getCurrentOrder() {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
-
     const match = output.match(/Order override:\s*(.+)$/m);
     const raw = match ? match[1] : output;
     return raw
@@ -107,7 +107,6 @@ function loadProfiles(authProfilesPath) {
 
 function buildListText(profiles) {
   const lines = ["🔑 OpenAI Codex OAuth Profiles:", ""];
-
   profiles.forEach((profile, index) => {
     const primaryMark = profile.isPrimary ? "★ " : "";
     const statusMark = profile.isValid ? "✓ valid" : "✗ expired";
@@ -116,8 +115,9 @@ function buildListText(profiles) {
     lines.push(`   Account: ${profile.accountLabel} | ${expiryLabel}: ${formatUtc(profile.expiresMs)}`);
     lines.push("");
   });
-
   lines.push(`Reply /${COMMAND_LIST} <number> to switch primary.`);
+  lines.push(`Reply /${COMMAND_LIST} ${ACTION_ADD} để mở flow OAuth local.`);
+  lines.push(`Reply /${COMMAND_LIST} ${ACTION_NAME} để xem hướng dẫn đổi tên profile.`);
   return lines.join("\n");
 }
 
@@ -131,6 +131,10 @@ function buildTelegramButtons(profiles) {
       })),
     );
   }
+  rows.push([
+    { text: "➕ ADD", callback_data: `/${COMMAND_LIST} ${ACTION_ADD}` },
+    { text: "✏️ NAME", callback_data: `/${COMMAND_LIST} ${ACTION_NAME}` },
+  ]);
   return rows;
 }
 
@@ -139,6 +143,81 @@ function switchPrimary(selected, profiles) {
   execFileSync(getOpenclawBin(), ["models", "auth", "order", "set", "--provider", PROVIDER_ID, ...ordered], {
     stdio: ["ignore", "pipe", "pipe"],
   });
+}
+
+function isValidProfileSuffix(name) {
+  return /^[a-z0-9_-]+$/i.test(name);
+}
+
+function startOauthFlowDetached() {
+  const child = spawn(getOpenclawBin(), ["models", "auth", "login", "--provider", PROVIDER_ID], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+}
+
+function handleAdd() {
+  try {
+    startOauthFlowDetached();
+  } catch {
+    // fallback to instruction-only mode
+  }
+  return {
+    text: [
+      "➕ ADD profile mới",
+      "",
+      "Plugin sẽ gọi flow OAuth local trên máy này.",
+      "Nếu terminal không hiện ra, hãy tự chạy lệnh sau:",
+      `\`${getOpenclawBin()} models auth login --provider ${PROVIDER_ID}\``,
+      "",
+      "Sau khi verify xong, profile mới thường sẽ rơi vào tên kiểu `openai-codex:default`.",
+      `Sau đó dùng /${COMMAND_LIST} ${ACTION_NAME} để xem hướng dẫn đổi tên profile.`,
+    ].join("\n"),
+  };
+}
+
+function handleNameHelp() {
+  return {
+    text: [
+      "✏️ Đổi tên profile",
+      "",
+      `Cú pháp: /${COMMAND_LIST} ${ACTION_NAME} <so_thu_tu> <ten_moi>`,
+      `Ví dụ: /${COMMAND_LIST} ${ACTION_NAME} 2 ten_cua_ban`,
+      "",
+      "Ghi chú:",
+      "- Chỉ rename được profile không phải profile đang active",
+      "- Nếu đang dùng đúng profile đó, hãy switch sang profile khác rồi quay lại đổi tên",
+    ].join("\n"),
+  };
+}
+
+function handleRename(profiles, indexText, newName) {
+  const choice = Number.parseInt(indexText, 10);
+  if (!Number.isFinite(choice) || choice < 1 || choice > profiles.length) {
+    return { text: `❌ Số không hợp lệ. Dùng /${COMMAND_LIST} để xem danh sách rồi chọn 1-${profiles.length}.`, isError: true };
+  }
+
+  const suffix = (newName || "").trim();
+  if (!suffix || !isValidProfileSuffix(suffix)) {
+    return { text: "❌ Tên mới không hợp lệ. Chỉ dùng chữ, số, dấu gạch dưới (_) hoặc gạch ngang (-).", isError: true };
+  }
+
+  const selected = profiles[choice - 1];
+  const newId = `${PROVIDER_ID}:${suffix}`;
+  if (selected.profileId === newId) return { text: `⚠️ Profile đã là ${newId} rồi.` };
+  if (profiles.some((p) => p.profileId === newId)) return { text: `❌ Tên mới đã tồn tại: ${newId}`, isError: true };
+  if (selected.isPrimary) {
+    return { text: "⚠️ Chỉ rename được profile không phải profile đang active. Hãy switch sang profile khác rồi quay lại đổi tên." };
+  }
+
+  return {
+    text: [
+      `ℹ️ Đã nhận yêu cầu đổi tên ${selected.profileId} → ${newId}.`,
+      "Bản 0.2.0 GitHub chỉ chốt flow list/switch/add và hướng dẫn rename an toàn.",
+      "Nếu cần flow rename tự động hoàn chỉnh, nên test local riêng trước rồi mới public.",
+    ].join("\n"),
+  };
 }
 
 function listOrSwitch(ctx) {
@@ -155,11 +234,17 @@ function listOrSwitch(ctx) {
   const rawArgs = (ctx?.args || "").trim();
   if (!rawArgs) {
     const payload = { text: buildListText(profiles) };
-    if (ctx?.channel === "telegram") {
-      payload.channelData = { telegram: { buttons: buildTelegramButtons(profiles) } };
-    }
+    if (ctx?.channel === "telegram") payload.channelData = { telegram: { buttons: buildTelegramButtons(profiles) } };
     return payload;
   }
+
+  const parts = rawArgs.split(/\s+/);
+  const verb = parts[0]?.toLowerCase();
+
+  if (verb === ACTION_ADD) return handleAdd();
+  if (verb === ACTION_NAME && parts.length === 1) return handleNameHelp();
+  if (verb === ACTION_NAME) return handleRename(profiles, parts[1], parts.slice(2).join(" "));
+  if (verb === ACTION_CONFIRM_NAME) return handleNameHelp();
 
   const choice = Number.parseInt(rawArgs, 10);
   if (!Number.isFinite(choice) || choice < 1 || choice > profiles.length) {
@@ -174,13 +259,13 @@ function listOrSwitch(ctx) {
 const plugin = {
   id: "codex-list",
   name: "Codex OAuth Profile Switcher",
-  version: "1.0.0",
-  description: "Offline local /codex_list command for OpenClaw.",
+  version: "0.2.0",
+  description: "Offline local /codex_list command for OpenClaw with list, switch, add and rename guidance.",
   register(api) {
     api.registerCommand({
       name: COMMAND_LIST,
       nativeNames: { default: COMMAND_LIST },
-      description: "List and switch OpenAI Codex OAuth profiles locally",
+      description: "List, switch and guide local OpenAI Codex OAuth profile flows",
       acceptsArgs: true,
       requireAuth: true,
       handler: async (ctx) => listOrSwitch(ctx),
