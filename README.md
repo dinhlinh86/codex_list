@@ -37,13 +37,13 @@ Helper hiện đã có fallback khi shim `openclaw` trong PATH bị hỏng; nó 
 
 ## Prompt cài cho OpenClaw khác
 
-Copy-paste prompt này và chỉ sửa version/tag/repo theo bản muốn cài:
+### Bản điền sẵn cho `v0.2.0`
 
 ```text
-Cài plugin `codex-list` phiên bản <VERSION> từ repo <REPO_URL> cho máy OpenClaw này.
+Cài plugin `codex-list` phiên bản `v0.2.0` từ repo `https://github.com/dinhlinh86/codex_list` cho máy OpenClaw này.
 
 Yêu cầu:
-1. Clone đúng version/tag/commit <VERSION>.
+1. Clone đúng tag `v0.2.0` từ repo `https://github.com/dinhlinh86/codex_list`.
 2. Copy các file sau vào `~/.openclaw/extensions/codex-list/`:
    - `openclaw.plugin.json`
    - `index.js`
@@ -73,4 +73,35 @@ Lưu ý:
   - `/codexadd`
   - `/vr`
 - Nếu shim `openclaw` trong PATH bị lỗi, ưu tiên fallback sang `node .../dist/index.js`.
+```
+
+### Mẫu tổng quát
+
+```text
+Cài plugin `codex-list` phiên bản <VERSION> từ repo <REPO_URL> cho máy OpenClaw này.
+
+Yêu cầu:
+1. Clone đúng version/tag/commit <VERSION>.
+2. Copy các file sau vào `~/.openclaw/extensions/codex-list/`:
+   - `openclaw.plugin.json`
+   - `index.js`
+   - `oauth-helper.py`
+   - `README.md`
+3. Đảm bảo `oauth-helper.py` có quyền chạy (`chmod +x`).
+4. Kiểm tra máy có đủ dependency:
+   - `python3`
+   - `node`
+   - `expect`
+5. Bật plugin `codex-list` trong `~/.openclaw/openclaw.json`:
+   - thêm `codex-list` vào `plugins.allow`
+   - thêm `plugins.entries.codex-list.enabled = true`
+6. Restart gateway.
+7. Test local commands:
+   - `/codex_list`
+   - `/codexadd`
+   - `/vr <callback_url>`
+8. Nếu có flow OAuth cũ bị treo thì dọn:
+   - `~/.openclaw/extensions/codex-list/oauth-state.json`
+   - `~/.openclaw/extensions/codex-list/oauth-runtime/*`
+9. Xác nhận plugin chạy local/offline, không rơi sang model AI cho các command trên.
 ```
