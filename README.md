@@ -22,7 +22,7 @@ Offline local plugin cho OpenClaw để:
 **Flow ngắn:**
 1. Gõ `/codex_list` để xem danh sách profile Codex local.
 2. Gõ `/codex_list 2` (ví dụ) để đổi sang profile số 2.
-3. Gõ `/codex_name 2 thulinh1009` để đổi tên profile số 2.
+3. Gõ `/codex_name 2 ten_cua_ban` để đổi tên profile số 2.
 4. Nếu session chưa ăn profile mới, dùng `/new` hoặc `/reset`.
 5. Gõ `/status` để kiểm tra lại session hiện tại.
 
@@ -95,7 +95,7 @@ Trong Telegram DM với bot:
 Đổi tên profile theo số thứ tự:
 
 ```text
-/codex_name 2 thulinh1009
+/codex_name 2 ten_cua_ban
 ```
 
 ## Prompt cài đặt cho OpenClaw khác
