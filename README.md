@@ -3,6 +3,7 @@
 Offline local plugin cho OpenClaw để:
 - liệt kê toàn bộ `openai-codex:*` trong local auth store
 - đổi profile primary ngay từ Telegram bằng `/codex_list <number>`
+- đổi tên profile theo số thứ tự bằng `/codex_name <number> <new_name>`
 - không gọi model AI để xử lý command
 
 ## Demo
@@ -14,20 +15,27 @@ Offline local plugin cho OpenClaw để:
 ```text
 /codex_list
 /codex_list <number>
+/codex_name <number> <new_name>
 /status
 ```
 
 **Flow ngắn:**
 1. Gõ `/codex_list` để xem danh sách profile Codex local.
 2. Gõ `/codex_list 2` (ví dụ) để đổi sang profile số 2.
-3. Nếu session chưa ăn profile mới, dùng `/new` hoặc `/reset`.
-4. Gõ `/status` để kiểm tra lại session hiện tại.
+3. Gõ `/codex_name 2 thulinh1009` để đổi tên profile số 2.
+4. Nếu session chưa ăn profile mới, dùng `/new` hoặc `/reset`.
+5. Gõ `/status` để kiểm tra lại session hiện tại.
 
 ## Tính năng
 
 - `/codex_list` → in danh sách profile Codex local
 - `/codex_list <number>` → đẩy profile đã chọn lên đầu auth order
-- Telegram inline buttons khi channel hỗ trợ
+- `/codex_name` → hiện hướng dẫn cú pháp đổi tên profile
+- `/codex_name <number> <new_name>` → đổi tên profile theo số thứ tự từ `/codex_list`
+- Nếu là Telegram, `/codex_name` có inline buttons xác nhận trước khi chạy
+- Trước khi rename: `openclaw gateway stop`
+- Sau khi rename: `openclaw gateway start`
+- Verify lại bằng grep để phát hiện tham chiếu cũ còn sót
 - Đọc dữ liệu từ local file `~/.openclaw/agents/<agent>/agent/auth-profiles.json`
 - Switch bằng local CLI `openclaw models auth order set ...`
 
@@ -84,6 +92,12 @@ Trong Telegram DM với bot:
 /codex_list 2
 ```
 
+Đổi tên profile theo số thứ tự:
+
+```text
+/codex_name 2 thulinh1009
+```
+
 ## Prompt cài đặt cho OpenClaw khác
 
 Có thể đưa prompt này cho một OpenClaw khác:
@@ -106,13 +120,19 @@ Clone repo https://github.com/dinhlinh86/codex_list rồi cài plugin `codex-lis
    - Telegram command scope cũ nếu menu không hiện đúng.
 
 Yêu cầu kỹ thuật của plugin:
-- command /codex_list chạy hoàn toàn local/offline, không gọi model AI
+- command /codex_list và /codex_name chạy hoàn toàn local/offline, không gọi model AI
 - đọc ~/.openclaw/agents/main/agent/auth-profiles.json
 - liệt kê mọi key openai-codex:*
 - hiển thị số thứ tự, profile id, account/email, trạng thái token, đánh dấu profile primary
 - nếu là Telegram thì thêm inline buttons
 - hỗ trợ /codex_list <number> để gọi local CLI:
   openclaw models auth order set --provider openai-codex <selected> <others...>
+- hỗ trợ /codex_name <number> <new_name> để:
+  - stop gateway
+  - đổi tên profile trong JSON local
+  - đổi tên file profile cũ nếu thư mục ~/.openclaw/auth-profiles tồn tại
+  - start lại gateway
+  - grep verify để kiểm tra còn sót tham chiếu cũ hay không
 
 Prompt để tạo nhiều acc codex không bị đè lên nhau (cop vào openclaw) : 
 - tạo cho tôi link openai-codex oauth sau khi tôi hoàn thành verify thì đổi tên thành openai-codex:<ten-rieng>
@@ -130,7 +150,10 @@ Prompt để tạo nhiều acc codex không bị đè lên nhau (cop vào opencl
 - [ ] `/codex_list` in đủ profile
 - [ ] Nút Telegram hiện đúng
 - [ ] `/codex_list <number>` switch được primary
-- [ ] Chạy lại `/codex_list` thấy thứ tự đổi đúng
+- [ ] `/codex_name` hiện đúng cú pháp
+- [ ] `/codex_name <number> <new_name>` hiện bước xác nhận nếu là Telegram
+- [ ] Rename xong gateway tự stop/start lại
+- [ ] Chạy lại `/codex_list` thấy tên mới và thứ tự đúng
 
 ## Star History
 

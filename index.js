@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 
 const DEFAULT_AGENT_ID = "main";
 const PROVIDER_ID = "openai-codex";
 const COMMAND_LIST = "codex_list";
+const COMMAND_NAME = "codex_name";
+const CONFIRM_PREFIX = "confirm:";
 
 function expandHome(input) {
   if (input === "~") return os.homedir();
@@ -26,6 +28,10 @@ function getAgentId(ctx) {
 
 function getAuthProfilesPath(agentId) {
   return expandHome(`~/.openclaw/agents/${agentId}/agent/auth-profiles.json`);
+}
+
+function getLegacyProfileDir() {
+  return expandHome("~/.openclaw/auth-profiles");
 }
 
 function parseExpiresMs(value) {
@@ -118,6 +124,7 @@ function buildListText(profiles) {
   });
 
   lines.push(`Reply /${COMMAND_LIST} <number> to switch primary.`);
+  lines.push(`Reply /${COMMAND_NAME} <number> <new_name> to rename a profile.`);
   return lines.join("\n");
 }
 
@@ -134,11 +141,105 @@ function buildTelegramButtons(profiles) {
   return rows;
 }
 
+function buildRenameButtons(index, newName) {
+  return [
+    [
+      { text: "✅ Xác nhận", callback_data: `/${COMMAND_NAME} ${CONFIRM_PREFIX}${index} ${newName}` },
+      { text: "❌ Hủy", callback_data: `/${COMMAND_NAME}` },
+    ],
+  ];
+}
+
 function switchPrimary(selected, profiles) {
   const ordered = [selected.profileId, ...profiles.map((p) => p.profileId).filter((id) => id !== selected.profileId)];
   execFileSync(getOpenclawBin(), ["models", "auth", "order", "set", "--provider", PROVIDER_ID, ...ordered], {
     stdio: ["ignore", "pipe", "pipe"],
   });
+}
+
+function isValidProfileSuffix(name) {
+  return /^[a-z0-9_-]+$/i.test(name);
+}
+
+function parseRenameArgs(rawArgs) {
+  const trimmed = rawArgs.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith(CONFIRM_PREFIX)) {
+    const afterPrefix = trimmed.slice(CONFIRM_PREFIX.length).trim();
+    const [indexText, newName = ""] = afterPrefix.split(/\s+/, 2);
+    return { confirmed: true, indexText, newName };
+  }
+
+  const [indexText, newName = ""] = trimmed.split(/\s+/, 2);
+  return { confirmed: false, indexText, newName };
+}
+
+function runShell(command) {
+  return execSync(command, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], shell: "/bin/zsh" }).trim();
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getJsonFilesUnderOpenclaw() {
+  const output = runShell('find ~/.openclaw -name "*.json" -type f');
+  return output ? output.split("\n").map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function replaceInJsonFiles(jsonFiles, oldId, newId) {
+  const matcher = new RegExp(escapeRegExp(oldId), "g");
+  for (const file of jsonFiles) {
+    const source = fs.readFileSync(file, "utf8");
+    const next = source.replace(matcher, newId);
+    if (next !== source) fs.writeFileSync(file, next);
+  }
+}
+
+function verifyRename(oldId) {
+  try {
+    const escaped = oldId.replace(/'/g, `'"'"'`);
+    return runShell(`grep -R -n --include='*.json' '${escaped}' ~/.openclaw || true`);
+  } catch {
+    return "";
+  }
+}
+
+function renameLegacyProfileFile(oldId, newId) {
+  const legacyDir = getLegacyProfileDir();
+  const oldFile = path.join(legacyDir, `${oldId}.json`);
+  const newFile = path.join(legacyDir, `${newId}.json`);
+  if (!fs.existsSync(oldFile)) return;
+  if (fs.existsSync(newFile)) throw new Error(`Profile file already exists: ${newFile}`);
+  fs.renameSync(oldFile, newFile);
+}
+
+function restartGatewayAroundRename(oldId, newId) {
+  const jsonFiles = getJsonFilesUnderOpenclaw();
+  const startArgs = ["gateway", "start"];
+
+  execFileSync(getOpenclawBin(), ["gateway", "stop"], { stdio: ["ignore", "pipe", "pipe"] });
+  let started = false;
+
+  try {
+    replaceInJsonFiles(jsonFiles, oldId, newId);
+    renameLegacyProfileFile(oldId, newId);
+    execFileSync(getOpenclawBin(), startArgs, { stdio: ["ignore", "pipe", "pipe"] });
+    started = true;
+    const verifyOutput = verifyRename(oldId);
+    return { verifyOutput };
+  } catch (error) {
+    if (!started) {
+      try {
+        execFileSync(getOpenclawBin(), startArgs, { stdio: ["ignore", "pipe", "pipe"] });
+        started = true;
+      } catch {
+        // ignore restart failure here; original error is more important for caller
+      }
+    }
+    throw error;
+  }
 }
 
 function listOrSwitch(ctx) {
@@ -171,11 +272,84 @@ function listOrSwitch(ctx) {
   return { text: `✅ Switched primary Codex profile to:\n${selected.profileId}` };
 }
 
+function renameProfile(ctx) {
+  const authProfilesPath = getAuthProfilesPath(getAgentId(ctx));
+  if (!fs.existsSync(authProfilesPath)) {
+    return { text: `❌ Không thấy auth-profiles.json tại:\n${authProfilesPath}`, isError: true };
+  }
+
+  const profiles = loadProfiles(authProfilesPath);
+  if (profiles.length === 0) {
+    return { text: "❌ Không có OpenAI Codex OAuth profile nào.", isError: true };
+  }
+
+  const parsedArgs = parseRenameArgs((ctx?.args || "").trim());
+  if (!parsedArgs) {
+    return {
+      text: [
+        `ℹ️ Cú pháp /${COMMAND_NAME}:`,
+        `/${COMMAND_NAME}`,
+        `/${COMMAND_NAME} <so_thu_tu> <ten_moi>`,
+        "",
+        `Ví dụ: /${COMMAND_NAME} 2 thulinh1009`,
+      ].join("\n"),
+    };
+  }
+
+  const choice = Number.parseInt(parsedArgs.indexText, 10);
+  if (!Number.isFinite(choice) || choice < 1 || choice > profiles.length) {
+    return { text: `❌ Số không hợp lệ. Dùng /${COMMAND_LIST} để xem danh sách rồi chọn 1-${profiles.length}.`, isError: true };
+  }
+
+  const newSuffix = parsedArgs.newName.trim();
+  if (!newSuffix || !isValidProfileSuffix(newSuffix)) {
+    return {
+      text: "❌ Tên mới không hợp lệ. Chỉ dùng chữ, số, dấu gạch dưới (_) hoặc gạch ngang (-).",
+      isError: true,
+    };
+  }
+
+  const selected = profiles[choice - 1];
+  const oldId = selected.profileId;
+  const newId = `${PROVIDER_ID}:${newSuffix}`;
+
+  if (oldId === newId) {
+    return { text: `⚠️ Profile đã mang tên ${newId} rồi.` };
+  }
+
+  if (profiles.some((profile) => profile.profileId === newId)) {
+    return { text: `❌ Tên mới đã tồn tại: ${newId}`, isError: true };
+  }
+
+  if (!parsedArgs.confirmed) {
+    const payload = {
+      text: `⚠️ Xác nhận đổi tên ${oldId} → ${newId}?\nPlugin sẽ stop gateway, đổi tên local rồi start lại.`,
+    };
+    if (ctx?.channel === "telegram") {
+      payload.channelData = { telegram: { buttons: buildRenameButtons(choice, newSuffix) } };
+    }
+    return payload;
+  }
+
+  try {
+    const progressLines = [`🔄 Đang đổi tên ${oldId} → ${newId}...`];
+    const result = restartGatewayAroundRename(oldId, newId);
+    if (result.verifyOutput) {
+      return {
+        text: `${progressLines.join("\n")}\n⚠️ Đổi tên xong nhưng vẫn còn tham chiếu cũ cần kiểm tra thêm:\n${result.verifyOutput}`,
+      };
+    }
+    return { text: `${progressLines.join("\n")}\n✅ Đổi tên thành công!` };
+  } catch (error) {
+    return { text: `⚠️ Đổi tên thất bại: ${error?.message || String(error)}`, isError: true };
+  }
+}
+
 const plugin = {
   id: "codex-list",
   name: "Codex OAuth Profile Switcher",
-  version: "1.0.0",
-  description: "Offline local /codex_list command for OpenClaw.",
+  version: "0.2.0",
+  description: "Offline local /codex_list and /codex_name commands for OpenClaw.",
   register(api) {
     api.registerCommand({
       name: COMMAND_LIST,
@@ -184,6 +358,15 @@ const plugin = {
       acceptsArgs: true,
       requireAuth: true,
       handler: async (ctx) => listOrSwitch(ctx),
+    });
+
+    api.registerCommand({
+      name: COMMAND_NAME,
+      nativeNames: { default: COMMAND_NAME },
+      description: "Rename OpenAI Codex OAuth profiles locally",
+      acceptsArgs: true,
+      requireAuth: true,
+      handler: async (ctx) => renameProfile(ctx),
     });
   },
 };
