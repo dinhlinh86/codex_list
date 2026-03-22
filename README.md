@@ -113,6 +113,9 @@ Yêu cầu kỹ thuật của plugin:
 - nếu là Telegram thì thêm inline buttons
 - hỗ trợ /codex_list <number> để gọi local CLI:
   openclaw models auth order set --provider openai-codex <selected> <others...>
+
+Prompt để tạo nhiều acc codex không bị đè lên nhau (cop vào openclaw) : 
+- tạo cho tôi link openai-codex oauth sau khi tôi hoàn thành verify thì đổi tên thành openai-codex:<ten-rieng>
 ```
 
 ## Ghi chú triển khai
