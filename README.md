@@ -1,6 +1,7 @@
 # codex-list
 
 Plugin local cho OpenClaw để quản lý **OpenAI Codex OAuth profiles**.
+Sử dụng trong cửa sổ chat Telegram 
 
 🍎 macOS · 🐧 Linux · 🐳 Docker
 
