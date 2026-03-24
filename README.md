@@ -49,7 +49,8 @@ Yêu cầu:
 4. Bật plugin `codex-list` trong `~/.openclaw/openclaw.json`:
    - thêm `codex-list` vào `plugins.allow`
    - thêm `plugins.entries.codex-list.enabled = true`
-5. Restart gateway.
+5. Restart gateway. 
+   - Nếu không có systemd user service có thể môi trường này chạy kiểu local/container, nên restart không điều khiển được service manager chạy gateway foreground/background trực tiếp rồi test plugin ở runtime thật
 6. Test các lệnh:
    - `/codex_list`
    - `/codexadd`
@@ -61,7 +62,6 @@ Yêu cầu:
    - `~/.openclaw/extensions/codex-list/oauth-runtime/`
 
 Lưu ý:
-- Plugin này không phụ thuộc `expect`.
-- Flow OAuth hiện tại dùng HTTP token exchange trực tiếp.
-- `HEALTH` hiện đang tạm tắt.
+- chỉ dừng khi chạy hết lệnh hoặc lỗi phải thông báo. 
+- cập nhật từng bước
 ```
