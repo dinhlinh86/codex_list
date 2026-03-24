@@ -18,6 +18,12 @@ Mục tiêu của plugin này là:
 - `/codexadd` — bắt đầu flow add OAuth
 - `/vr <callback_url>` — hoàn tất verify callback OAuth
 
+## Demo
+
+> Ảnh demo đã che thông tin nhạy cảm.
+
+![Telegram demo (redacted)](assets/telegram-demo-redacted.jpg)
+
 ## Lưu ý hiện tại
 
 - `HEALTH` đang **tạm tắt** để chỉnh lại cho chuẩn hơn, nên README này **không xem health là tính năng stable**.
@@ -105,6 +111,57 @@ Bật plugin trong `~/.openclaw/openclaw.json`:
 - bật `plugins.entries.codex-list.enabled = true`
 
 Sau đó restart gateway.
+
+## Prompt để OpenClaw khác tự cài plugin
+
+### Prompt điền sẵn cho repo này
+
+```text
+Cài plugin `codex-list` từ repo `https://github.com/dinhlinh86/codex_list` cho máy OpenClaw này.
+
+Yêu cầu:
+1. Clone repo về máy local.
+2. Copy các file sau vào `~/.openclaw/extensions/codex-list/`:
+   - `openclaw.plugin.json`
+   - `index.js`
+   - `oauth-helper.py`
+   - `README.md`
+3. Đảm bảo `oauth-helper.py` có quyền chạy: `chmod +x ~/.openclaw/extensions/codex-list/oauth-helper.py`
+4. Bật plugin `codex-list` trong `~/.openclaw/openclaw.json`:
+   - thêm `codex-list` vào `plugins.allow`
+   - thêm `plugins.entries.codex-list.enabled = true`
+5. Restart gateway.
+6. Test các command sau:
+   - `/codex_list`
+   - `/codexadd`
+   - `/vr <callback_url>`
+   - `/codexname <number> <ten_moi>`
+   - `/codexdel <number>`
+7. Xác nhận các command trên chạy local, không cần model AI để xử lý list/switch/rename/delete/add/verify flow.
+8. Nếu có file runtime cũ bị kẹt thì dọn:
+   - `~/.openclaw/extensions/codex-list/oauth-state.json`
+   - `~/.openclaw/extensions/codex-list/oauth-runtime/`
+
+Lưu ý:
+- Plugin này không phụ thuộc `expect`.
+- Flow OAuth hiện tại dùng HTTP token exchange trực tiếp, không feed callback vào terminal interactive.
+- `HEALTH` hiện đang tạm tắt.
+```
+
+### Prompt mẫu tổng quát
+
+```text
+Cài plugin `<PLUGIN_ID>` từ repo `<REPO_URL>` cho máy OpenClaw này.
+
+Yêu cầu:
+1. Clone repo về máy local.
+2. Copy file plugin vào đúng thư mục `~/.openclaw/extensions/<PLUGIN_ID>/`.
+3. Cấp quyền chạy cho các helper script nếu có.
+4. Bật plugin trong `~/.openclaw/openclaw.json` bằng `plugins.allow` và `plugins.entries`.
+5. Restart gateway.
+6. Chạy smoke test các command chính.
+7. Xác nhận plugin hoạt động local như thiết kế.
+```
 
 ## Yêu cầu môi trường
 
