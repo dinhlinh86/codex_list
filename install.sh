@@ -7,7 +7,8 @@ DEST_DIR="$HOME/.openclaw/extensions/$PLUGIN_ID"
 CONFIG="$HOME/.openclaw/openclaw.json"
 
 mkdir -p "$DEST_DIR"
-cp "$SRC_DIR/openclaw.plugin.json" "$SRC_DIR/index.js" "$SRC_DIR/README.md" "$DEST_DIR/"
+cp "$SRC_DIR/openclaw.plugin.json" "$SRC_DIR/index.js" "$SRC_DIR/oauth-helper.py" "$SRC_DIR/README.md" "$DEST_DIR/"
+chmod +x "$DEST_DIR/oauth-helper.py"
 
 python3 - <<'PY'
 import json, pathlib
