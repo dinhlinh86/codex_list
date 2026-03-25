@@ -50,8 +50,7 @@ Yêu cầu:
 4. Bật plugin `codex-list` trong `~/.openclaw/openclaw.json`:
    - thêm `codex-list` vào `plugins.allow`
    - thêm `plugins.entries.codex-list.enabled = true`
-5. Restart gateway. 
-   - Nếu không có systemd user service có thể môi trường này chạy kiểu local/container, nên restart không điều khiển được service manager chạy gateway foreground/background trực tiếp rồi test plugin ở runtime thật
+5. Test plugin trước; nếu plugin chưa hoạt động thì reload/restart OpenClaw gateway theo cách phù hợp với môi trường hiện tại (ví dụ `openclaw gateway restart`, hoặc với Docker thì restart/recreate container), rồi test lại. Không tự kill process thủ công.
 6. Test các lệnh:
    - `/codex_list`
    - `/codexadd`
