@@ -47,9 +47,10 @@ Yêu cầu:
    - `README.md`
 3. Đảm bảo `oauth-helper.py` có quyền chạy:
    chmod +x ~/.openclaw/extensions/codex-list/oauth-helper.py
-4. Bật plugin `codex-list` trong `~/.openclaw/openclaw.json`:
-   - thêm `codex-list` vào `plugins.allow`
-   - thêm `plugins.entries.codex-list.enabled = true`
+4. Cập nhật file ~/.openclaw/openclaw.json:
+   - Thêm "codex-list" vào CUỐI mảng plugins.allow (giữ nguyên các phần tử cũ).
+   - Thêm "codex-list": { "enabled": true } vào plugins.entries (giữ nguyên các entry cũ).
+   - Không sửa/xóa bất kỳ nội dung nào khác. Validate JSON trước khi ghi.
 5. Test plugin trước; nếu plugin chưa hoạt động thì reload/restart OpenClaw gateway theo cách phù hợp với môi trường hiện tại (ví dụ `openclaw gateway restart`, hoặc với Docker thì restart/recreate container), rồi test lại. Không tự kill process thủ công.
 6. Test các lệnh:
    - `/codex_list`
